@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [#322](https://github.com/deviceinsight/kafkactl/issues/322) Support SASL credential injection in pods via k8s secret
 ### Changed
 - [#308](https://github.com/deviceinsight/kafkactl/issues/308) `--value null` and `--key null` now produce a null (tombstone) value/key instead of the literal string `"null"`. To write the literal string `"null"`, use base64 encoding: `--value bnVsbA== --value-encoding base64`
+- [#133](https://github.com/deviceinsight/kafkactl/issues/133) Credential storage integration: interactive password prompting when username is set but password is missing, TLS cert key passphrase support for encrypted private keys, and OS keyring integration via `zalando/go-keyring`
 
 ### Fixed
 - [#313](https://github.com/deviceinsight/kafkactl/issues/313) Use `IncrementalAlterConfigs` API to fix TOCTOU race condition when altering topic/broker configs concurrently

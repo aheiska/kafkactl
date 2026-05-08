@@ -24,6 +24,7 @@ func TestAllAvailableEnvironmentVariablesAreParsed(t *testing.T) {
 	context.TLS.CA = "my-ca"
 	context.TLS.Cert = "my-cert"
 	context.TLS.CertKey = "my-cert-key"
+	context.TLS.Passphrase = "my-cert-key-passphrase"
 	context.TLS.Insecure = true
 	context.Sasl.Enabled = true
 	context.Sasl.Username = "user"
@@ -42,6 +43,7 @@ func TestAllAvailableEnvironmentVariablesAreParsed(t *testing.T) {
 	context.SchemaRegistry.TLS.CA = "my-avro-ca"
 	context.SchemaRegistry.TLS.Cert = "my-avro-cert"
 	context.SchemaRegistry.TLS.CertKey = "my-avro-cert-key"
+	context.SchemaRegistry.TLS.Passphrase = "my-avro-cert-key-passphrase"
 	context.SchemaRegistry.TLS.Insecure = true
 	context.SchemaRegistry.Username = "avro-user"
 	context.SchemaRegistry.Password = "avro-pass"

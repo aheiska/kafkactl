@@ -178,6 +178,7 @@ func parsePodEnvironment(context internal.ClientContext) []string {
 	envVariables = appendStringIfDefined(envVariables, global.TLSCa, context.TLS.CA)
 	envVariables = appendStringIfDefined(envVariables, global.TLSCert, context.TLS.Cert)
 	envVariables = appendStringIfDefined(envVariables, global.TLSCertKey, context.TLS.CertKey)
+	envVariables = appendStringIfDefined(envVariables, global.TLSCertKeyPassphrase, context.TLS.Passphrase)
 	envVariables = appendBool(envVariables, global.TLSInsecure, context.TLS.Insecure)
 	envVariables = appendBool(envVariables, global.SaslEnabled, context.Sasl.Enabled)
 
@@ -199,6 +200,7 @@ func parsePodEnvironment(context internal.ClientContext) []string {
 	envVariables = appendStringIfDefined(envVariables, global.SchemaRegistryTLSCa, context.SchemaRegistry.TLS.CA)
 	envVariables = appendStringIfDefined(envVariables, global.SchemaRegistryTLSCert, context.SchemaRegistry.TLS.Cert)
 	envVariables = appendStringIfDefined(envVariables, global.SchemaRegistryTLSCertKey, context.SchemaRegistry.TLS.CertKey)
+	envVariables = appendStringIfDefined(envVariables, global.SchemaRegistryTLSCertKeyPassphrase, context.SchemaRegistry.TLS.Passphrase)
 	envVariables = appendBool(envVariables, global.SchemaRegistryTLSInsecure, context.SchemaRegistry.TLS.Insecure)
 	envVariables = appendStringIfDefined(envVariables, global.SchemaRegistryUsername, context.SchemaRegistry.Username)
 	envVariables = appendStringIfDefined(envVariables, global.SchemaRegistryPassword, context.SchemaRegistry.Password)

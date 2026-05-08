@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/deviceinsight/kafkactl/v5/internal/credential"
 	"github.com/deviceinsight/kafkactl/v5/internal/helpers/avro"
 
 	"github.com/deviceinsight/kafkactl/v5/internal/auth"
@@ -67,11 +68,12 @@ type AvroConfig struct {
 }
 
 type TLSConfig struct {
-	Enabled  bool
-	CA       string
-	Cert     string
-	CertKey  string
-	Insecure bool
+	Enabled    bool
+	CA         string
+	Cert       string
+	CertKey    string
+	Passphrase string
+	Insecure   bool
 }
 
 type K8sToleration struct {
@@ -144,6 +146,8 @@ func CreateClientContext() (ClientContext, error) {
 	var context ClientContext
 	var err error
 
+	credentials := newCredentialResolver()
+
 	context.Name, err = global.GetCurrentContext()
 	if err != nil {
 		return context, err
@@ -171,6 +175,10 @@ func CreateClientContext() (ClientContext, error) {
 	if context.TLS.CertKey, err = resolvePath("contexts." + context.Name + ".tls.certKey"); err != nil {
 		return context, err
 	}
+	if context.TLS.Passphrase, err = resolvePassphrase(credentials, context.Name, context.TLS.CertKey, "tls.certKeyPassphrase", "TLS Cert Key Passphrase"); err != nil {
+		return context, err
+	}
+
 	context.TLS.Insecure = viper.GetBool("contexts." + context.Name + ".tls.insecure")
 	context.ClientID = viper.GetString("contexts." + context.Name + ".clientID")
 
@@ -194,9 +202,19 @@ func CreateClientContext() (ClientContext, error) {
 	if context.SchemaRegistry.TLS.CertKey, err = resolvePath("contexts." + context.Name + ".schemaRegistry.tls.certKey"); err != nil {
 		return context, err
 	}
+	if context.SchemaRegistry.TLS.Passphrase, err = resolvePassphrase(credentials, context.Name, context.SchemaRegistry.TLS.CertKey, "schemaRegistry.tls.certKeyPassphrase", "Schema Registry TLS Cert Key Passphrase"); err != nil {
+		return context, err
+	}
+
 	context.SchemaRegistry.TLS.Insecure = viper.GetBool("contexts." + context.Name + ".schemaRegistry.tls.insecure")
 	context.SchemaRegistry.Username = viper.GetString("contexts." + context.Name + ".schemaRegistry.username")
-	context.SchemaRegistry.Password = viper.GetString("contexts." + context.Name + ".schemaRegistry.password")
+
+	if context.SchemaRegistry.URL != "" && context.SchemaRegistry.Username != "" {
+		context.SchemaRegistry.Password, err = resolvePassword(credentials, context.Name, "schemaRegistry.password", "Schema Registry Password")
+		if err != nil {
+			return context, err
+		}
+	}
 	if context.Protobuf.ProtosetFiles, err = resolvePaths("contexts." + context.Name + ".protobuf.protosetFiles"); err != nil {
 		return context, err
 	}
@@ -212,11 +230,17 @@ func CreateClientContext() (ClientContext, error) {
 	context.Consumer.IsolationLevel = viper.GetString("contexts." + context.Name + ".consumer.isolationLevel")
 	context.Sasl.Enabled = viper.GetBool("contexts." + context.Name + ".sasl.enabled")
 	context.Sasl.Username = viper.GetString("contexts." + context.Name + ".sasl.username")
-	context.Sasl.Password = viper.GetString("contexts." + context.Name + ".sasl.password")
 	context.Sasl.Mechanism = viper.GetString("contexts." + context.Name + ".sasl.mechanism")
 	context.Sasl.Version = viper.GetString("contexts." + context.Name + ".sasl.version")
 	context.Sasl.TokenProvider.PluginName = viper.GetString("contexts." + context.Name + ".sasl.tokenProvider.plugin")
 	context.Sasl.TokenProvider.Options = viper.GetStringMap("contexts." + context.Name + ".sasl.tokenProvider.options")
+
+	if context.Sasl.Enabled && context.Sasl.Username != "" {
+		context.Sasl.Password, err = resolvePassword(credentials, context.Name, "sasl.password", "SASL Password")
+		if err != nil {
+			return context, err
+		}
+	}
 
 	viper.SetDefault("contexts."+context.Name+".kubernetes.binary", "kubectl")
 	context.Kubernetes.Enabled = IsKubernetesEnabled()
@@ -255,6 +279,29 @@ func CreateClientContext() (ClientContext, error) {
 func IsKubernetesEnabled() bool {
 	contextName, _ := global.GetCurrentContext()
 	return viper.GetBool("contexts." + contextName + ".kubernetes.enabled")
+}
+
+func newCredentialResolver() credential.Resolver {
+	if (viper.IsSet("keyring.enabled") && !viper.GetBool("keyring.enabled")) || IsKubernetesEnabled() {
+		output.Debugf("using prompt credential resolver")
+		return credential.NewPromptCredentialResolver()
+	}
+	output.Debugf("using keyring credential resolver")
+	return credential.NewKeyringResolver()
+}
+
+func resolvePassword(credentials credential.Resolver, contextName, configKey, promptLabel string) (string, error) {
+	if viper.IsSet("contexts." + contextName + "." + configKey) {
+		return viper.GetString("contexts." + contextName + "." + configKey), nil
+	}
+	return credentials.ResolvePassword(fmt.Sprintf("%s.%s", contextName, configKey), promptLabel)
+}
+
+func resolvePassphrase(credentials credential.Resolver, contextName, certKeyPath, configKey, promptLabel string) (string, error) {
+	if viper.IsSet("contexts." + contextName + "." + configKey) {
+		return viper.GetString("contexts." + contextName + "." + configKey), nil
+	}
+	return credentials.ResolveTLSPassphrase(certKeyPath, fmt.Sprintf("%s.%s", contextName, configKey), promptLabel)
 }
 
 func CreateClient(context *ClientContext) (sarama.Client, error) {
@@ -429,9 +476,35 @@ func setupTLSConfig(tlsConfig TLSConfig) (*tls.Config, error) {
 	var clientCert tls.Certificate
 
 	if tlsConfig.Cert != "" && tlsConfig.CertKey != "" {
-		clientCert, err = tls.LoadX509KeyPair(tlsConfig.Cert, tlsConfig.CertKey)
+		keyPEM, err := os.ReadFile(tlsConfig.CertKey)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "failed to read cert key file")
+		}
+
+		if credential.IsLegacyEncryptedPEM(keyPEM) {
+			return nil, errors.Errorf("cert key %s uses legacy PEM encryption (PKCS#1 with DEK-Info) which is not supported.\n"+
+				"Convert to PKCS#8 format:\n"+
+				"    openssl pkcs8 -topk8 -v2 aes-256-cbc -in %s -out key.p8.pem", tlsConfig.CertKey, tlsConfig.CertKey)
+		}
+
+		if credential.IsEncryptedPEM(keyPEM) {
+			if tlsConfig.Passphrase == "" {
+				return nil, errors.Errorf("cert key %s is encrypted but no passphrase provided. Set tls.certKeyPassphrase in config", tlsConfig.CertKey)
+			}
+			keyPEM, err = credential.DecryptPEMKey(keyPEM, tlsConfig.Passphrase)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to decrypt cert key")
+			}
+		}
+
+		certPEM, err := os.ReadFile(tlsConfig.Cert)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to read cert file")
+		}
+
+		clientCert, err = tls.X509KeyPair(certPEM, keyPEM)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to load X509 key pair")
 		}
 	}
 
