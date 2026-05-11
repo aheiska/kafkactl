@@ -1,11 +1,15 @@
 package credential
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
+	"github.com/deviceinsight/kafkactl/v5/internal/output"
 	"github.com/zalando/go-keyring"
 )
+
+const KeyringService = "kafkactl"
 
 type KeyringResolver struct {
 	// keyringGetFn and keyringSetFn are used for testing; nil means use the real keyring.
@@ -29,10 +33,13 @@ func (r *KeyringResolver) ResolvePassword(fieldName, promptLabel string) (string
 
 	value, err := getFn(KeyringService, fieldName)
 	if err == nil && value != "" {
+		output.Debugf("password found in keyring: %s", fieldName)
 		return value, nil
 	}
-	if err != nil && err != keyring.ErrNotFound {
-		fmt.Fprintf(os.Stderr, "Warning: keyring lookup failed: %v\n", err)
+	if err != nil && errors.Is(err, keyring.ErrNotFound) {
+		output.Debugf("no password stored in keyring for %s", fieldName)
+	} else if err != nil {
+		return "", fmt.Errorf("error looking up keyring service: %v", err)
 	}
 
 	value, err = r.delegate.ResolvePassword(fieldName, promptLabel)
@@ -46,12 +53,11 @@ func (r *KeyringResolver) ResolvePassword(fieldName, promptLabel string) (string
 			setFn = keyring.Set
 		}
 		if err := setFn(KeyringService, fieldName, value); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to save to keyring: %v\n", err)
+			return "", fmt.Errorf("failed to save to keyring: %w", err)
 		}
 	}
 
 	return value, nil
-
 }
 
 func (r *KeyringResolver) ResolveTLSPassphrase(certKeyPath, fieldName, promptLabel string) (string, error) {

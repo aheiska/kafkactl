@@ -2,7 +2,9 @@ package credential
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"os/signal"
 
 	"github.com/pkg/errors"
 	"golang.org/x/term"
@@ -49,11 +51,39 @@ func NewPromptCredentialResolver() Resolver {
 }
 
 func readPassword(label string) (string, error) {
-	fmt.Fprintf(os.Stderr, "%s: ", label)
-	password, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Fprintln(os.Stderr)
+	_, _ = fmt.Fprintf(os.Stderr, "%s: ", label)
+
+	fd := int(os.Stdin.Fd())
+	oldState, err := term.GetState(fd)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to get terminal state")
 	}
-	return string(password), nil
+
+	type result struct {
+		password string
+		err      error
+	}
+	resultCh := make(chan result, 1)
+
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt)
+	defer signal.Stop(signalChan)
+
+	go func() {
+		pw, err := term.ReadPassword(fd)
+		resultCh <- result{string(pw), err}
+	}()
+
+	select {
+	case r := <-resultCh:
+		_, _ = fmt.Fprintln(os.Stderr)
+		if r.err == io.EOF {
+			return "", errors.New("password entry aborted")
+		}
+		return r.password, r.err
+	case <-signalChan:
+		_ = term.Restore(fd, oldState)
+		_, _ = fmt.Fprintln(os.Stderr)
+		return "", errors.New("password entry aborted")
+	}
 }

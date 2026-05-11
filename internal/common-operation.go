@@ -282,7 +282,7 @@ func IsKubernetesEnabled() bool {
 }
 
 func newCredentialResolver() credential.Resolver {
-	if (viper.IsSet("keyring.enabled") && !viper.GetBool("keyring.enabled")) || IsKubernetesEnabled() {
+	if viper.IsSet("keyring.enabled") && !viper.GetBool("keyring.enabled") {
 		output.Debugf("using prompt credential resolver")
 		return credential.NewPromptCredentialResolver()
 	}

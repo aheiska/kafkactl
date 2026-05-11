@@ -9,8 +9,6 @@ import (
 	"github.com/youmark/pkcs8"
 )
 
-const KeyringService = "kafkactl"
-
 type Resolver interface {
 	ResolvePassword(fieldName, promptLabel string) (string, error)
 	ResolveTLSPassphrase(certKeyPath, fieldName, promptLabel string) (string, error)
