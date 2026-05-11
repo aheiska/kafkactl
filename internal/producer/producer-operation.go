@@ -129,14 +129,24 @@ func (operation *Operation) Produce(topic string, flags Flags) error {
 		return errors.New("parameters --null-value and --value cannot be used together")
 	}
 
+	if flags.Value == "null" {
+		flags.NullValue = true
+		flags.Value = ""
+	}
+
+	var msgKey *string
+	if flags.Key != "null" {
+		msgKey = &flags.Key
+	}
+
 	if flags.NullValue || flags.Value != "" {
 		// produce a single message
 		var message *sarama.ProducerMessage
 
 		if flags.NullValue {
-			message, err = serializers.Serialize(input.Message{Key: &flags.Key}, flags)
+			message, err = serializers.Serialize(input.Message{Key: msgKey}, flags)
 		} else {
-			message, err = serializers.Serialize(input.Message{Key: &flags.Key, Value: &flags.Value}, flags)
+			message, err = serializers.Serialize(input.Message{Key: msgKey, Value: &flags.Value}, flags)
 		}
 
 		if err != nil {
