@@ -387,6 +387,70 @@ func TestProduceAvroMessageWithUnionAvroJsonIntegration(t *testing.T) {
 	testutil.AssertContainSubstring(t, `"ExpiresOn":{"string":"2022-12-12"}`, stdout)
 }
 
+func TestProduceNullValueStringTreatedAsTombstoneIntegration(t *testing.T) {
+	testutil.StartIntegrationTest(t)
+
+	topicName := testutil.CreateTopic(t, "produce-topic")
+
+	kafkaCtl := testutil.CreateKafkaCtlCommand()
+
+	if _, err := kafkaCtl.Execute("produce", topicName, "--key", "test-key", "--value", "null"); err != nil {
+		t.Fatalf("failed to execute command: %v", err)
+	}
+
+	testutil.AssertEquals(t, "message produced (partition=0\toffset=0)", kafkaCtl.GetStdOut())
+
+	if _, err := kafkaCtl.Execute("consume", topicName, "--from-beginning", "-o", "yaml", "--exit"); err != nil {
+		t.Fatalf("failed to execute command: %v", err)
+	}
+
+	record := strings.ReplaceAll(kafkaCtl.GetStdOut(), "\n", " ")
+	testutil.AssertContainSubstring(t, "value: null", record)
+}
+
+func TestProduceNullKeyStringTreatedAsNullKeyIntegration(t *testing.T) {
+	testutil.StartIntegrationTest(t)
+
+	topicName := testutil.CreateTopic(t, "produce-topic")
+
+	kafkaCtl := testutil.CreateKafkaCtlCommand()
+
+	if _, err := kafkaCtl.Execute("produce", topicName, "--key", "null", "--value", "test-value"); err != nil {
+		t.Fatalf("failed to execute command: %v", err)
+	}
+
+	testutil.AssertEquals(t, "message produced (partition=0\toffset=0)", kafkaCtl.GetStdOut())
+
+	if _, err := kafkaCtl.Execute("consume", topicName, "--from-beginning", "-o", "yaml", "--exit"); err != nil {
+		t.Fatalf("failed to execute command: %v", err)
+	}
+
+	record := strings.ReplaceAll(kafkaCtl.GetStdOut(), "\n", " ")
+	testutil.AssertContainNoSubstring(t, "key:", record)
+	testutil.AssertContainSubstring(t, "value: test-value", record)
+}
+
+func TestProduceNullStringLiteralViaBase64Integration(t *testing.T) {
+	testutil.StartIntegrationTest(t)
+
+	topicName := testutil.CreateTopic(t, "produce-topic")
+
+	kafkaCtl := testutil.CreateKafkaCtlCommand()
+
+	// base64("null") = "bnVsbA==" — use encoding to write the literal string "null"
+	if _, err := kafkaCtl.Execute("produce", topicName, "--key", "test-key", "--value", "bnVsbA==", "--value-encoding", "base64"); err != nil {
+		t.Fatalf("failed to execute command: %v", err)
+	}
+
+	testutil.AssertEquals(t, "message produced (partition=0\toffset=0)", kafkaCtl.GetStdOut())
+
+	if _, err := kafkaCtl.Execute("consume", topicName, "--from-beginning", "--exit", "--print-keys"); err != nil {
+		t.Fatalf("failed to execute command: %v", err)
+	}
+
+	testutil.AssertEquals(t, "test-key#null", kafkaCtl.GetStdOut())
+}
+
 func TestProduceTombstoneIntegration(t *testing.T) {
 	testutil.StartIntegrationTest(t)
 
