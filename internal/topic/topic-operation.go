@@ -650,8 +650,19 @@ func getTargetReplicas(currentReplicas []int32, brokerReplicaCount map[int32]int
 
 		lastReplica := replicas[len(replicas)-1]
 		replicas = replicas[:len(replicas)-1]
-		brokerReplicaCount[lastReplica]--
+		if _, ok := brokerReplicaCount[lastReplica]; ok {
+			brokerReplicaCount[lastReplica]--
+		}
 	}
+
+	// Strip unavailable replicas so the increase phase replaces them with available brokers.
+	var availableReplicas []int32
+	for _, r := range replicas {
+		if _, ok := brokerReplicaCount[r]; ok {
+			availableReplicas = append(availableReplicas, r)
+		}
+	}
+	replicas = availableReplicas
 
 	var unusedBrokerIDs []int32
 

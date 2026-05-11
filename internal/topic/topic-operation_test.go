@@ -131,6 +131,28 @@ func TestGetTargetReplicasDecreaseAllUnavailable(t *testing.T) {
 	}
 }
 
+func TestGetTargetReplicasDecreaseUnavailableThenIncrease(t *testing.T) {
+
+	// All current replicas on unavailable brokers; result must use only available brokers.
+	brokerReplicaCount := map[int32]int{
+		1: 0,
+		2: 0,
+	}
+
+	replicas, err := getTargetReplicas([]int32{3, 4, 5}, brokerReplicaCount, 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(replicas) != 2 {
+		t.Fatalf("expected 2 replicas, got %d", len(replicas))
+	}
+	for _, r := range replicas {
+		if r == 3 || r == 4 || r == 5 {
+			t.Fatalf("unavailable broker %d should not be in result %v", r, replicas)
+		}
+	}
+}
+
 func TestGetTargetReplicasNotEnoughBrokers(t *testing.T) {
 
 	brokerReplicaCount := map[int32]int{
