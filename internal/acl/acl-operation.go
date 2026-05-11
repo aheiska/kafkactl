@@ -246,7 +246,7 @@ func (operation *Operation) CreateACL(flags CreateACLFlags) error {
 	for _, acl := range acls {
 
 		if !flags.ValidateOnly {
-			if err = admin.CreateACL(resource, acl); err != nil {
+			if err = admin.CreateACLs([]*sarama.ResourceAcls{{Resource: resource, Acls: []*sarama.Acl{&acl}}}); err != nil {
 				return errors.Wrap(err, "failed to create acl")
 			}
 		}
