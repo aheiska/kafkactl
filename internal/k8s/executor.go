@@ -163,8 +163,10 @@ func (kubectl *executor) Run(dockerImageType, entryPoint string, kafkactlArgs []
 		kubectl.saslSecret = fmt.Sprintf("kafkactl-sasl-%s", suffix)
 
 		// ensure we don't take over lifecycle of an existing secret
-		checkArgs := kubectl.addGlobalArgs([]string{"get", "secret", kubectl.saslSecret})
-		if _, err := kubectl.runner.ExecuteAndReturn(kubectl.kubectlBinary, checkArgs); err == nil {
+		checkArgs := kubectl.addGlobalArgs([]string{"get", "secret", kubectl.saslSecret, "--ignore-not-found"})
+		if bytes, err := kubectl.runner.ExecuteAndReturn(kubectl.kubectlBinary, checkArgs); err != nil {
+			return errors.Wrapf(err, "unable to check if secret %s exists", kubectl.saslSecret)
+		} else if len(strings.TrimSpace(string(bytes))) > 0 {
 			return errors.Errorf("secret %s already exists; kafkactl will not manage the lifecycle of existing secrets", kubectl.saslSecret)
 		}
 
@@ -178,12 +180,15 @@ func (kubectl *executor) Run(dockerImageType, entryPoint string, kafkactlArgs []
 		if _, err := kubectl.runner.ExecuteAndReturn(kubectl.kubectlBinary, createSecretArgs); err != nil {
 			return errors.Wrapf(err, "unable to create secret %s", kubectl.saslSecret)
 		}
+		output.Debugf("created sasl secret: %s", kubectl.saslSecret)
 
 		defer func() {
 			deleteSecretArgs := []string{"delete", "secret", kubectl.saslSecret, "--ignore-not-found=true"}
 			deleteSecretArgs = kubectl.addGlobalArgs(deleteSecretArgs)
 			if _, err := kubectl.runner.ExecuteAndReturn(kubectl.kubectlBinary, deleteSecretArgs); err != nil {
 				output.Warnf("unable to delete secret %s: %v", kubectl.saslSecret, err)
+			} else {
+				output.Debugf("deleted sasl secret: %s", kubectl.saslSecret)
 			}
 		}()
 	} else if kubectl.saslSecretName != "" {
