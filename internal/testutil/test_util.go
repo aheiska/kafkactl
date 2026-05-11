@@ -233,6 +233,13 @@ func AssertContainSubstring(t *testing.T, expected, actual string) {
 	}
 }
 
+func AssertContainNoSubstring(t *testing.T, expected, actual string) {
+	t.Helper()
+	if strings.Contains(actual, expected) {
+		t.Fatalf("expected string NOT to contain: %s actual: %s", expected, actual)
+	}
+}
+
 func AssertContains(t *testing.T, expected string, array []string) {
 	t.Helper()
 	if !util.ContainsString(array, expected) {

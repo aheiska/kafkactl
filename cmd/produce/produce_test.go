@@ -426,7 +426,7 @@ func TestProduceNullKeyStringTreatedAsNullKeyIntegration(t *testing.T) {
 	}
 
 	record := strings.ReplaceAll(kafkaCtl.GetStdOut(), "\n", " ")
-	testutil.AssertContainSubstring(t, "key: null", record)
+	testutil.AssertContainNoSubstring(t, "key:", record)
 	testutil.AssertContainSubstring(t, "value: test-value", record)
 }
 
