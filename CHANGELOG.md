@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 5.19.0 - 2026-05-11
+
 ### Added
 - [#322](https://github.com/deviceinsight/kafkactl/issues/322) Support SASL credential injection in pods via k8s secret
 ### Changed
