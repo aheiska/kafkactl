@@ -170,12 +170,9 @@ func getOffsetBounds(client *sarama.Client, topic string, flags Flags, currentPa
 		output.Debugf("to-timestamp beyond messages, using newest offset %d on partition %d", endOffset, currentPartition)
 	}
 
-	// Check if there are no messages in the range
 	if endOffset != sarama.OffsetNewest && startOffset > endOffset {
-		// Check if there are any messages in the range BEFORE adjusting endOffset
-		// Note: startOffset == endOffset means there's ONE message at that offset
-		endOffset = sarama.OffsetNewest // nothing to consume on this partition
 		output.Debugf("no messages in range (start=%d > end=%d), marking partition %d as empty", startOffset, endOffset, currentPartition)
+		endOffset = sarama.OffsetNewest // nothing to consume on this partition
 	} else if endOffset != sarama.OffsetNewest {
 		endOffset = endOffset - 1
 		output.Debugf("adjusted endOffset to %d on partition %d", endOffset, currentPartition)
