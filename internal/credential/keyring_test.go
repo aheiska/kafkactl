@@ -35,13 +35,33 @@ func TestKeyringResolver_KeyringHit_ReturnsWithoutPrompt(t *testing.T) {
 	}
 }
 
-func TestKeyringResolver_KeyringMiss_PromptsAndSaves(t *testing.T) {
-	var savedService, savedKey, savedValue string
-
+func TestKeyringResolver_KeyringMiss_PromptsAndStages(t *testing.T) {
 	resolver := &KeyringResolver{
 		keyringGetFn: func(_, _ string) (string, error) {
 			return "", keyring.ErrNotFound
 		},
+		delegate: &PromptCredentialResolver{
+			promptFn: func(_ string) (string, error) {
+				return "prompted-pass", nil
+			},
+		},
+	}
+	result, err := resolver.ResolvePassword("sasl.password", "SASL Password")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "prompted-pass" {
+		t.Errorf("expected %q, got %q", "prompted-pass", result)
+	}
+	if len(resolver.pending) != 1 || resolver.pending[0].key != "sasl.password" || resolver.pending[0].value != "prompted-pass" {
+		t.Errorf("expected pending write for sasl.password, got %v", resolver.pending)
+	}
+}
+
+func TestKeyringResolver_Flush_SavesPendingWrites(t *testing.T) {
+	var savedService, savedKey, savedValue string
+	resolver := &KeyringResolver{
+		keyringGetFn: func(_, _ string) (string, error) { return "", keyring.ErrNotFound },
 		keyringSetFn: func(service, key, value string) error {
 			savedService = service
 			savedKey = key
@@ -49,64 +69,81 @@ func TestKeyringResolver_KeyringMiss_PromptsAndSaves(t *testing.T) {
 			return nil
 		},
 		delegate: &PromptCredentialResolver{
-			promptFn: func(_ string) (string, error) {
-				return "prompted-pass", nil
-			},
+			promptFn: func(_ string) (string, error) { return "prompted-pass", nil },
 		},
 	}
-	result, err := resolver.ResolvePassword("sasl.password", "SASL Password")
-	if err != nil {
+	if _, err := resolver.ResolvePassword("sasl.password", "SASL Password"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "prompted-pass" {
-		t.Errorf("expected %q, got %q", "prompted-pass", result)
+	if savedKey != "" {
+		t.Error("keyring should not be written during ResolvePassword")
+	}
+	if err := resolver.Flush(); err != nil {
+		t.Fatalf("unexpected commit error: %v", err)
 	}
 	if savedService != KeyringService || savedKey != "sasl.password" || savedValue != "prompted-pass" {
 		t.Errorf("keyring save mismatch: %s/%s=%s", savedService, savedKey, savedValue)
 	}
 }
 
-func TestKeyringResolver_KeyringError_WarnsAndFallsBackToPrompt(t *testing.T) {
+func TestKeyringResolver_Flush_SetError_ReturnsError(t *testing.T) {
+	resolver := &KeyringResolver{
+		keyringGetFn: func(_, _ string) (string, error) { return "", keyring.ErrNotFound },
+		keyringSetFn: func(_, _, _ string) error { return fmt.Errorf("keyring write failed") },
+		delegate: &PromptCredentialResolver{
+			promptFn: func(_ string) (string, error) { return "prompted-pass", nil },
+		},
+	}
+	if _, err := resolver.ResolvePassword("sasl.password", "SASL Password"); err != nil {
+		t.Fatalf("unexpected error during resolve: %v", err)
+	}
+	if err := resolver.Flush(); err == nil {
+		t.Fatal("expected error from Flush when setFn fails")
+	}
+}
+
+func TestKeyringResolver_KeyringError_ReturnsError(t *testing.T) {
 	resolver := &KeyringResolver{
 		keyringGetFn: func(_, _ string) (string, error) {
 			return "", fmt.Errorf("keyring daemon unavailable")
 		},
-		keyringSetFn: func(_, _, _ string) error { return nil },
 		delegate: &PromptCredentialResolver{
 			promptFn: func(_ string) (string, error) {
-				return "prompted-pass", nil
+				t.Fatal("prompt should not be called on keyring error")
+				return "", nil
 			},
 		},
 	}
-	result, err := resolver.ResolvePassword("sasl.password", "SASL Password")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "prompted-pass" {
-		t.Errorf("expected %q, got %q", "prompted-pass", result)
+	_, err := resolver.ResolvePassword("sasl.password", "SASL Password")
+	if err == nil {
+		t.Fatal("expected error on keyring lookup failure")
 	}
 }
 
-func TestKeyringResolver_KeyringSetError_WarnsButReturnsValue(t *testing.T) {
+func TestKeyringResolver_ClearMode_DeletesExistingAndPrompts(t *testing.T) {
+	var deletedKey string
 	resolver := &KeyringResolver{
-		keyringGetFn: func(_, _ string) (string, error) {
-			return "", keyring.ErrNotFound
-		},
-		keyringSetFn: func(_, _, _ string) error {
-			return fmt.Errorf("keyring write failed")
+		keyringDelFn: func(_, key string) error {
+			deletedKey = key
+			return nil
 		},
 		delegate: &PromptCredentialResolver{
-			promptFn: func(_ string) (string, error) {
-				return "prompted-pass", nil
-			},
+			promptFn: func(_ string) (string, error) { return "new-pass", nil },
 		},
+		clearMode: true,
 	}
 	result, err := resolver.ResolvePassword("sasl.password", "SASL Password")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "prompted-pass" {
-		t.Errorf("expected %q, got %q", "prompted-pass", result)
+	if result != "new-pass" {
+		t.Errorf("expected %q, got %q", "new-pass", result)
+	}
+	if deletedKey != "sasl.password" {
+		t.Errorf("expected keyring entry to be deleted, got deletedKey=%q", deletedKey)
+	}
+	if len(resolver.pending) != 1 || resolver.pending[0].value != "new-pass" {
+		t.Errorf("expected new value staged, got %v", resolver.pending)
 	}
 }
 

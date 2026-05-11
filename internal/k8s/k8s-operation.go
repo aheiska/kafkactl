@@ -104,12 +104,17 @@ func (op *operation) run(ctx context.Context, clientContext internal.ClientConte
 	return exec.Run("scratch", "/kafkactl", kafkaCtlCommand, podEnvironment)
 }
 
+// localOnlyFlags are persistent flags that must not be forwarded to the k8s pod.
+var localOnlyFlags = map[string]bool{
+	"clear-keyring": true,
+}
+
 func parseFlags(cmd *cobra.Command) ([]string, error) {
 	var flags []string
 	var err error
 
 	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
-		if err == nil && flag.Changed {
+		if err == nil && flag.Changed && !localOnlyFlags[flag.Name] {
 			if parsedFlags, parseErr := parseFlag(flag, cmd.Flags()); err != nil {
 				err = parseErr
 			} else {

@@ -281,13 +281,24 @@ func IsKubernetesEnabled() bool {
 	return viper.GetBool("contexts." + contextName + ".kubernetes.enabled")
 }
 
+var credentialResolver credential.Resolver
+
+func FlushCredentials() error {
+	if credentialResolver == nil {
+		return nil
+	}
+	return credentialResolver.Flush()
+}
+
 func newCredentialResolver() credential.Resolver {
 	if viper.IsSet("keyring.enabled") && !viper.GetBool("keyring.enabled") {
 		output.Debugf("using prompt credential resolver")
-		return credential.NewPromptCredentialResolver()
+		credentialResolver = credential.NewPromptCredentialResolver()
+		return credentialResolver
 	}
 	output.Debugf("using keyring credential resolver")
-	return credential.NewKeyringResolver()
+	credentialResolver = credential.NewKeyringResolver(global.GetFlags().ClearKeyring)
+	return credentialResolver
 }
 
 func resolvePassword(credentials credential.Resolver, contextName, configKey, promptLabel string) (string, error) {

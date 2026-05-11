@@ -11,50 +11,61 @@ import (
 
 const KeyringService = "kafkactl"
 
-type KeyringResolver struct {
-	// keyringGetFn and keyringSetFn are used for testing; nil means use the real keyring.
-	keyringGetFn func(service, key string) (string, error)
-	keyringSetFn func(service, key, value string) error
-	delegate     Resolver
+type pendingWrite struct {
+	key, value string
 }
 
-func NewKeyringResolver() Resolver {
+type KeyringResolver struct {
+	// test hooks; nil means use the real keyring functions
+	keyringGetFn func(service, key string) (string, error)
+	keyringSetFn func(service, key, value string) error
+	keyringDelFn func(service, key string) error
+	delegate     Resolver
+	clearMode    bool
+	pending      []pendingWrite
+}
+
+func NewKeyringResolver(clearMode bool) Resolver {
 	return &KeyringResolver{
-		delegate: NewPromptCredentialResolver(),
+		delegate:  NewPromptCredentialResolver(),
+		clearMode: clearMode,
 	}
 }
 
 func (r *KeyringResolver) ResolvePassword(fieldName, promptLabel string) (string, error) {
-
-	getFn := r.keyringGetFn
-	if getFn == nil {
-		getFn = keyring.Get
-	}
-
-	value, err := getFn(KeyringService, fieldName)
-	if err == nil && value != "" {
-		output.Debugf("password found in keyring: %s", fieldName)
-		return value, nil
-	}
-	if err != nil && errors.Is(err, keyring.ErrNotFound) {
+	if r.clearMode {
+		delFn := r.keyringDelFn
+		if delFn == nil {
+			delFn = keyring.Delete
+		}
+		if err := delFn(KeyringService, fieldName); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+			output.Warnf("failed to clear keyring entry %s: %v", fieldName, err)
+		} else if err == nil {
+			output.Debugf("cleared keyring entry: %s", fieldName)
+		}
+	} else {
+		getFn := r.keyringGetFn
+		if getFn == nil {
+			getFn = keyring.Get
+		}
+		value, err := getFn(KeyringService, fieldName)
+		if err == nil {
+			output.Debugf("password found in keyring: %s", fieldName)
+			return value, nil
+		}
+		if !errors.Is(err, keyring.ErrNotFound) {
+			return "", fmt.Errorf("failed to get keyring entry %s: %w", fieldName, err)
+		}
 		output.Debugf("no password stored in keyring for %s", fieldName)
-	} else if err != nil {
-		return "", fmt.Errorf("error looking up keyring service: %v", err)
 	}
 
-	value, err = r.delegate.ResolvePassword(fieldName, promptLabel)
+	value, err := r.delegate.ResolvePassword(fieldName, promptLabel)
 	if err != nil {
 		return "", err
 	}
 
 	if value != "" {
-		setFn := r.keyringSetFn
-		if setFn == nil {
-			setFn = keyring.Set
-		}
-		if err := setFn(KeyringService, fieldName, value); err != nil {
-			return "", fmt.Errorf("failed to save to keyring: %w", err)
-		}
+		r.pending = append(r.pending, pendingWrite{key: fieldName, value: value})
 	}
 
 	return value, nil
@@ -72,4 +83,19 @@ func (r *KeyringResolver) ResolveTLSPassphrase(certKeyPath, fieldName, promptLab
 		return "", nil
 	}
 	return r.ResolvePassword(fieldName, promptLabel)
+}
+
+func (r *KeyringResolver) Flush() error {
+	setFn := r.keyringSetFn
+	if setFn == nil {
+		setFn = keyring.Set
+	}
+	for _, pw := range r.pending {
+		if err := setFn(KeyringService, pw.key, pw.value); err != nil {
+			return fmt.Errorf("failed to save to keyring: %w", err)
+		}
+		output.Debugf("saved keyring entry: %s", pw.key)
+	}
+	r.pending = nil
+	return nil
 }

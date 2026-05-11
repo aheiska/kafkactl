@@ -16,6 +16,10 @@ type PromptCredentialResolver struct {
 	promptFn func(label string) (string, error)
 }
 
+func NewPromptCredentialResolver() Resolver {
+	return &PromptCredentialResolver{}
+}
+
 func (r *PromptCredentialResolver) ResolvePassword(_, promptLabel string) (string, error) {
 	fn := r.promptFn
 	if fn == nil {
@@ -46,8 +50,8 @@ func (r *PromptCredentialResolver) ResolveTLSPassphrase(certKeyPath, fieldName, 
 	return r.ResolvePassword(fieldName, promptLabel)
 }
 
-func NewPromptCredentialResolver() Resolver {
-	return &PromptCredentialResolver{}
+func (r *PromptCredentialResolver) Flush() error {
+	return nil
 }
 
 func readPassword(label string) (string, error) {

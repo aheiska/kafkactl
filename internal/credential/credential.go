@@ -12,6 +12,7 @@ import (
 type Resolver interface {
 	ResolvePassword(fieldName, promptLabel string) (string, error)
 	ResolveTLSPassphrase(certKeyPath, fieldName, promptLabel string) (string, error)
+	Flush() error
 }
 
 func IsEncryptedPEM(data []byte) bool {
