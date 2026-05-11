@@ -59,7 +59,7 @@ func TestParseOffsets(t *testing.T) {
 			}
 
 			if eq := reflect.DeepEqual(test.wantOffsets, offsets); !eq {
-				t.Errorf("want %q got %q", test.wantOffsets, offsets)
+				t.Errorf("want %v got %v", test.wantOffsets, offsets)
 			}
 		})
 	}
