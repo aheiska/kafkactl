@@ -94,6 +94,8 @@ contexts:
       ca: my-ca
       cert: my-cert
       certKey: my-key
+      # optional: passphrase for encrypted cert key (if omitted and key is encrypted, will prompt or use keyring)
+      certKeyPassphrase: my-passphrase
       # set insecure to true to ignore all tls verification (defaults to false)
       insecure: false
 
@@ -101,6 +103,7 @@ contexts:
     sasl:
       enabled: true
       username: admin
+      # optional: if omitted, password is looked up in the OS keyring or prompted interactively
       password: admin
       # optional configure sasl mechanism as plaintext, scram-sha256, scram-sha512, oauth (defaults to plaintext)
       mechanism: oauth
@@ -200,6 +203,7 @@ contexts:
 
       # optional: basic auth credentials
       username: admin
+      # optional: if omitted, password is looked up in the OS keyring or prompted interactively
       password: admin
 
       # optional: tls config for avro
@@ -208,6 +212,8 @@ contexts:
         ca: my-ca
         cert: my-cert
         certKey: my-key
+        # optional: passphrase for encrypted cert key (if omitted and key is encrypted, will prompt or use keyring)
+        certKeyPassphrase: my-passphrase
         # set insecure to true to ignore all tls verification (defaults to false)
         insecure: false
 
@@ -242,6 +248,11 @@ contexts:
     consumer:
       # optional: isolationLevel (defaults to ReadCommitted)
       isolationLevel: ReadUncommitted
+
+# optional: keyring integration for credential storage (defaults to enabled)
+keyring:
+  # set to false to disable OS keyring lookup and storage for passwords/passphrases
+  enabled: true
 ----
 
 [#_config_file_read_order]
@@ -495,6 +506,63 @@ e.g. the key `contexts.default.tls.certKey` has the corresponding environment va
 If environment variables for the `default` context should be set, the prefix `CONTEXTS_DEFAULT_` can be omitted.
 So, instead of `CONTEXTS_DEFAULT_TLS_CERTKEY` one can also set `TLS_CERTKEY`.
 See *root_test.go* for more examples.
+
+== Password Handling
+
+kafkactl supports multiple strategies for supplying passwords — for SASL authentication, TLS cert key passphrases, and Schema Registry credentials.
+
+=== Interactive Prompting
+
+If a required credential is not present in the config file or environment, kafkactl prompts for it on the terminal:
+
+[,console]
+----
+$ kafkactl get topics
+SASL Password: _
+----
+
+=== OS Keyring
+
+After a password is entered interactively, kafkactl stores it in the OS keyring (GNOME Keyring on Linux, Keychain on macOS, Credential Manager on Windows) on successful command completion. Subsequent invocations retrieve the password from the keyring without prompting.
+
+Keyring storage is enabled by default. To disable it:
+
+[,yaml]
+----
+keyring:
+  enabled: false
+----
+
+To clear a stored credential and re-prompt (e.g. after a password rotation), use the `--clear-keyring` flag:
+
+[,console]
+----
+$ kafkactl get topics --clear-keyring
+----
+
+This deletes the existing keyring entry before prompting and stores the newly entered value on success.
+
+=== Credentials in Config File
+
+Credentials can be stored directly in the config file. This is convenient for development but not recommended for production environments:
+
+[,yaml]
+----
+contexts:
+  my-cluster:
+    sasl:
+      enabled: true
+      username: my-user
+      password: my-password   # stored in plaintext
+    tls:
+      certKey: my-key.pem
+      certKeyPassphrase: my-passphrase   # stored in plaintext
+----
+
+=== Kubernetes Secrets
+
+When running in Kubernetes mode, use `saslSecret` to avoid passing credentials as plaintext environment variables in the pod.
+See <<Running in Kubernetes>> for the full `saslSecret` configuration options.
 
 == Plugins
 

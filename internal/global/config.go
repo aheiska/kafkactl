@@ -16,9 +16,10 @@ import (
 )
 
 type Flags struct {
-	ConfigFile string
-	Context    string
-	Verbose    bool
+	ConfigFile   string
+	Context      string
+	Verbose      bool
+	ClearKeyring bool
 }
 
 const defaultContextPrefix = "CONTEXTS_DEFAULT_"

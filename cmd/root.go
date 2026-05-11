@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/deviceinsight/kafkactl/v5/internal"
 	"github.com/deviceinsight/kafkactl/v5/internal/global"
 	"github.com/hashicorp/go-plugin"
 
@@ -43,6 +44,10 @@ func NewKafkactlCommand(streams output.IOStreams) *cobra.Command {
 	})
 	cobra.OnFinalize(plugin.CleanupClients)
 
+	rootCmd.PersistentPostRunE = func(_ *cobra.Command, _ []string) error {
+		return internal.FlushCredentials()
+	}
+
 	rootCmd.AddCommand(config.NewConfigCmd())
 	rootCmd.AddCommand(consume.NewConsumeCmd())
 	rootCmd.AddCommand(create.NewCreateCmd())
@@ -65,6 +70,7 @@ func NewKafkactlCommand(streams output.IOStreams) *cobra.Command {
 		fmt.Sprintf("config file. default locations: %v", globalConfig.DefaultPaths()))
 	rootCmd.PersistentFlags().BoolVarP(&globalFlags.Verbose, "verbose", "V", false, "verbose output")
 	rootCmd.PersistentFlags().StringVar(&globalFlags.Context, "context", "", "The name of the context to use")
+	rootCmd.PersistentFlags().BoolVar(&globalFlags.ClearKeyring, "clear-keyring", false, "clear stored credentials from keyring and re-prompt")
 
 	err := rootCmd.RegisterFlagCompletionFunc("context", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return global.ListAvailableContexts(), cobra.ShellCompDirectiveNoFileComp

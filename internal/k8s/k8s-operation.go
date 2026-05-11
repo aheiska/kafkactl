@@ -104,12 +104,17 @@ func (op *operation) run(ctx context.Context, clientContext internal.ClientConte
 	return exec.Run("scratch", "/kafkactl", kafkaCtlCommand, podEnvironment)
 }
 
+// localOnlyFlags are persistent flags that must not be forwarded to the k8s pod.
+var localOnlyFlags = map[string]bool{
+	"clear-keyring": true,
+}
+
 func parseFlags(cmd *cobra.Command) ([]string, error) {
 	var flags []string
 	var err error
 
 	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
-		if err == nil && flag.Changed {
+		if err == nil && flag.Changed && !localOnlyFlags[flag.Name] {
 			if parsedFlags, parseErr := parseFlag(flag, cmd.Flags()); err != nil {
 				err = parseErr
 			} else {
@@ -178,6 +183,7 @@ func parsePodEnvironment(context internal.ClientContext) []string {
 	envVariables = appendStringIfDefined(envVariables, global.TLSCa, context.TLS.CA)
 	envVariables = appendStringIfDefined(envVariables, global.TLSCert, context.TLS.Cert)
 	envVariables = appendStringIfDefined(envVariables, global.TLSCertKey, context.TLS.CertKey)
+	envVariables = appendStringIfDefined(envVariables, global.TLSCertKeyPassphrase, context.TLS.Passphrase)
 	envVariables = appendBool(envVariables, global.TLSInsecure, context.TLS.Insecure)
 	envVariables = appendBool(envVariables, global.SaslEnabled, context.Sasl.Enabled)
 
@@ -199,6 +205,7 @@ func parsePodEnvironment(context internal.ClientContext) []string {
 	envVariables = appendStringIfDefined(envVariables, global.SchemaRegistryTLSCa, context.SchemaRegistry.TLS.CA)
 	envVariables = appendStringIfDefined(envVariables, global.SchemaRegistryTLSCert, context.SchemaRegistry.TLS.Cert)
 	envVariables = appendStringIfDefined(envVariables, global.SchemaRegistryTLSCertKey, context.SchemaRegistry.TLS.CertKey)
+	envVariables = appendStringIfDefined(envVariables, global.SchemaRegistryTLSCertKeyPassphrase, context.SchemaRegistry.TLS.Passphrase)
 	envVariables = appendBool(envVariables, global.SchemaRegistryTLSInsecure, context.SchemaRegistry.TLS.Insecure)
 	envVariables = appendStringIfDefined(envVariables, global.SchemaRegistryUsername, context.SchemaRegistry.Username)
 	envVariables = appendStringIfDefined(envVariables, global.SchemaRegistryPassword, context.SchemaRegistry.Password)
