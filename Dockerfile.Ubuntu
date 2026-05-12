@@ -5,7 +5,7 @@ COPY $TARGETPLATFORM/kafkactl /usr/local/bin
 RUN apt-get update && apt-get install -y bash-completion
 
 # install bash completion script
-RUN mkdir /etc/bash_completion.d
+RUN mkdir -p /etc/bash_completion.d
 RUN kafkactl completion bash > /etc/bash_completion.d/kafkactl
 
 # Create an app user so our program doesn't run as root.
